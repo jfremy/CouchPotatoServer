@@ -21,6 +21,8 @@ config = [{
                 },
                 {
                     'name': 'api_key',
+                },{
+                    'name': 'destination',
                 },
                 {
                     'name': 'on_snatch',

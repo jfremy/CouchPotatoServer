@@ -17,6 +17,7 @@ class Notifo(Notification):
 
         try:
             params = {
+                'to': '',
                 'label': self.default_title,
                 'msg': toUnicode(message),
             }
@@ -25,11 +26,14 @@ class Notifo(Notification):
                 'Authorization': "Basic %s" % base64.encodestring('%s:%s' % (self.conf('username'), self.conf('api_key')))[:-1]
             }
 
-            handle = self.urlopen(self.url, params = params, headers = headers)
-            result = json.loads(handle)
+            destination = self.conf('destination').split(',')
+            for dest in destination:
+                params['to'] = dest
+                handle = self.urlopen(self.url, params = params, headers = headers)
+                result = json.loads(handle)
 
-            if result['status'] != 'success' or result['response_message'] != 'OK':
-                raise Exception
+                if result['status'] != 'success' or result['response_message'] != 'OK':
+                    raise Exception
 
         except:
             log.error('Notification failed: %s' % traceback.format_exc())
