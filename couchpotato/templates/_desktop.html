@@ -30,7 +30,7 @@
 		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/block.js') }}"></script>
 		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/block/navigation.js') }}"></script>
 		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/block/footer.js') }}"></script>
-		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/block/more.js') }}"></script>
+		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/block/menu.js') }}"></script>
 
 		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/page/wanted.js') }}"></script>
 		<script type="text/javascript" src="{{ url_for('web.static', filename='scripts/page/settings.js') }}"></script>
@@ -51,6 +51,7 @@
 				new Uniform();
 
 				Api.setup({
+					'host': {{ fireEvent('app.api_url', single = True)|tojson|safe }},
 					'url': {{ url_for('api.index')|tojson|safe }},
 					'path_sep': {{ sep|tojson|safe }},
 					'is_remote': false

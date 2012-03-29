@@ -49,7 +49,9 @@ var Movie = new Class({
 					self.quality = new Element('div.quality', {
 						'events': {
 							'click': function(e){
-								self.el.getElement('.actions .releases').fireEvent('click', [e])
+								var releases = self.el.getElement('.actions .releases');
+									if(releases)
+										releases.fireEvent('click', [e])
 							}
 						}
 					})
@@ -101,7 +103,7 @@ var Movie = new Class({
 		var q = Quality.getQuality(quality_id);
 		return new Element('span', {
 			'text': q.label,
-			'class': 'q_'+q.identifier + 'q_id' + q.quality_id
+			'class': 'q_'+q.identifier + ' q_id' + q.id
 		}).inject(self.quality);
 
 	},
@@ -230,7 +232,7 @@ var IMDBAction = new Class({
 
 	gotoIMDB: function(e){
 		var self = this;
-		(e).stop();
+		(e).preventDefault();
 
 		window.open('http://www.imdb.com/title/'+self.id+'/');
 	}
@@ -258,7 +260,7 @@ var ReleaseAction = new Class({
 
 	show: function(e){
 		var self = this;
-		(e).stop();
+		(e).preventDefault();
 
 		if(!self.options_container){
 			self.options_container = new Element('div.options').adopt(
@@ -292,7 +294,7 @@ var ReleaseAction = new Class({
 					new Element('a.download.icon', {
 						'events': {
 							'click': function(e){
-								(e).stop();
+								(e).preventDefault();
 								self.download(release);
 							}
 						}
@@ -300,7 +302,7 @@ var ReleaseAction = new Class({
 					new Element('a.delete.icon', {
 						'events': {
 							'click': function(e){
-								(e).stop();
+								(e).preventDefault();
 								self.ignore(release);
 								this.getParent('.item').toggleClass('ignored')
 							}
