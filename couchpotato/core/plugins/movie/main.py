@@ -74,7 +74,7 @@ class MoviePlugin(Plugin):
                 'default_title': {'desc': 'Movie title to use for searches. Has to be one of the titles returned by movie.search.'},
             }
         })
-        addApiView('movie.delete', self.delete, docs = {
+        addApiView('movie.delete', self.deleteView, docs = {
             'desc': 'Delete a movie from the wanted list',
             'params': {
                 'id': {'desc': 'Movie ID(s) you want to delete.', 'type': 'int (comma separated)'},
@@ -82,6 +82,7 @@ class MoviePlugin(Plugin):
         })
 
         addEvent('movie.add', self.add)
+        addEvent('movie.delete', self.delete)
         addEvent('movie.get', self.get)
         addEvent('movie.list', self.list)
         addEvent('movie.restatus', self.restatus)
@@ -264,7 +265,8 @@ class MoviePlugin(Plugin):
         if not m:
             m = Movie(
                 library_id = library.get('id'),
-                profile_id = params.get('profile_id', default_profile.get('id'))
+                profile_id = params.get('profile_id', default_profile.get('id')),
+                status_id = status_active.get('id'),
             )
             db.add(m)
             fireEvent('library.update', params.get('identifier'), default_title = params.get('title', ''))
@@ -346,22 +348,27 @@ class MoviePlugin(Plugin):
             'success': True,
         })
 
-    def delete(self):
+    def deleteView(self):
 
         params = getParams()
-        db = get_session()
-
-        status = fireEvent('status.add', 'deleted', single = True)
 
         ids = params.get('id').split(',')
         for movie_id in ids:
-            movie = db.query(Movie).filter_by(id = movie_id).first()
-            movie.status_id = status.get('id')
-            db.commit()
+            self.delete(movie_id)
 
         return jsonified({
             'success': True,
         })
+
+    def delete(self, movie_id):
+
+        db = get_session()
+
+        movie = db.query(Movie).filter_by(id = movie_id).first()
+        db.delete(movie)
+        db.commit()
+
+        return True
 
     def restatus(self, movie_id):
 
@@ -372,18 +379,17 @@ class MoviePlugin(Plugin):
 
         m = db.query(Movie).filter_by(id = movie_id).first()
 
-        if not m.profile:
-            return
-
         log.debug('Changing status for %s' % (m.library.titles[0].title))
+        if not m.profile:
+            m.status_id = done_status.get('id')
+        else:
+            move_to_wanted = True
 
-        move_to_wanted = True
+            for t in m.profile.types:
+                for release in m.releases:
+                    if t.quality.identifier is release.quality.identifier and (release.status_id is done_status.get('id') and t.finish):
+                        move_to_wanted = False
 
-        for t in m.profile.types:
-            for release in m.releases:
-                if t.quality.identifier is release.quality.identifier and (release.status_id is done_status.get('id') and t.finish):
-                    move_to_wanted = False
-
-        m.status_id = active_status.get('id') if move_to_wanted else done_status.get('id')
+            m.status_id = active_status.get('id') if move_to_wanted else done_status.get('id')
 
         db.commit()

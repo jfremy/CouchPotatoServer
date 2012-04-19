@@ -7,6 +7,8 @@ from couchpotato.core.plugins.base import Plugin
 from couchpotato.core.settings.model import File
 from couchpotato.environment import Env
 from enzyme.exceptions import NoParserError, ParseError
+from guessit import guess_movie_info
+from subliminal.videos import scan
 import enzyme
 import logging
 import os
@@ -95,6 +97,10 @@ class Scanner(Plugin):
 
         addEvent('rename.after', after_rename)
 
+        # Disable lib logging
+        logging.getLogger('guessit').setLevel(logging.ERROR)
+        logging.getLogger('subliminal').setLevel(logging.ERROR)
+
     def scanFilesToLibrary(self, folder = None, files = None):
 
         groups = self.scan(folder = folder, files = files)
@@ -103,21 +109,14 @@ class Scanner(Plugin):
             if group['library']:
                 fireEvent('release.add', group = group)
 
-    def scanFolderToLibrary(self, folder = None, newer_as = None):
+    def scanFolderToLibrary(self, folder = None, newer_than = None):
 
         if not os.path.isdir(folder):
             return
 
         groups = self.scan(folder = folder)
 
-        # Open up the db
-        db = get_session()
-
-        # Mark all files as "offline" before a adding them to the database (again)
-        files_in_path = db.query(File).filter(File.path.like(toUnicode(folder) + u'%%'))
-        files_in_path.update({'available': 0}, synchronize_session = False)
-        db.commit()
-
+        added_identifier = []
         while True and not self.shuttingDown():
             try:
                 identifier, group = groups.popitem()
@@ -129,9 +128,10 @@ class Scanner(Plugin):
 
                 # Add release
                 fireEvent('release.add', group = group)
-                fireEvent('library.update', identifier = group['library'].get('identifier'))
+                library_item = fireEvent('library.update', identifier = group['library'].get('identifier'), single = True)
+                added_identifier.append(library_item['identifier'])
 
-        db.remove()
+        return added_identifier
 
 
     def scan(self, folder = None, files = []):
@@ -178,7 +178,7 @@ class Scanner(Plugin):
                 identifier = self.createStringIdentifier(file_path, folder, exclude_filename = is_dvd_file)
 
                 # Identifier with quality
-                quality = fireEvent('quality.guess', [file_path], single = True)
+                quality = fireEvent('quality.guess', [file_path], single = True) if not is_dvd_file else {'identifier':'dvdr'}
                 identifier_with_quality = '%s %s' % (identifier, quality.get('identifier', ''))
 
                 if not movie_files.get(identifier):
@@ -208,7 +208,7 @@ class Scanner(Plugin):
         for identifier, group in movie_files.iteritems():
             if identifier not in group['identifiers'] and len(identifier) > 0: group['identifiers'].append(identifier)
 
-            log.debug('Grouping files for: %s' % identifier)
+            log.debug('Grouping files: %s' % identifier)
 
             for file_path in group['unsorted_files']:
                 wo_ext = file_path[:-(len(getExt(file_path)) + 1)]
@@ -233,7 +233,7 @@ class Scanner(Plugin):
 
         # Group the files based on the identifier
         for identifier, group in movie_files.iteritems():
-            log.debug('Grouping files for: %s' % identifier)
+            log.debug('Grouping files on identifier: %s' % identifier)
 
             found_files = set(self.path_identifiers.get(identifier, []))
             group['unsorted_files'].extend(found_files)
@@ -262,7 +262,7 @@ class Scanner(Plugin):
                     file_too_new = tryInt(time.time() - file_time)
                     break
 
-            if file_too_new:
+            if file_too_new and not Env.get('dev'):
                 log.info('Files seem to be still unpacking or just unpacked (created on %s), ignoring for now: %s' % (time.ctime(file_time), identifier))
                 continue
 
@@ -290,6 +290,9 @@ class Scanner(Plugin):
 
             log.debug('Getting metadata for %s' % identifier)
             group['meta_data'] = self.getMetaData(group)
+
+            # Subtitle meta
+            group['subtitle_language'] = self.getSubtitleLanguage(group)
 
             # Get parent dir from movie files
             for movie_file in group['files']['movie']:
@@ -381,6 +384,42 @@ class Scanner(Plugin):
 
         return {}
 
+    def getSubtitleLanguage(self, group):
+        detected_languages = {}
+
+        # Subliminal scanner
+        try:
+            paths = group['files']['movie']
+            scan_result = []
+            for p in paths:
+                if not group['is_dvd']:
+                    scan_result.extend(scan(p))
+
+            for video, detected_subtitles in scan_result:
+                for s in detected_subtitles:
+                    if s.language and s.path not in paths:
+                        detected_languages[s.path] = [s.language]
+        except:
+            log.debug('Failed parsing subtitle languages for %s: %s' % (paths, traceback.format_exc()))
+
+        # IDX
+        for extra in group['files']['subtitle_extra']:
+            try:
+                if os.path.isfile(extra):
+                    output = open(extra, 'r')
+                    txt = output.read()
+                    output.close()
+
+                    idx_langs = re.findall('\nid: (\w+)', txt)
+
+                    sub_file = '%s.sub' % os.path.splitext(extra)[0]
+                    if len(idx_langs) > 0 and os.path.isfile(sub_file):
+                        detected_languages[sub_file] = idx_langs
+            except:
+                log.error('Failed parsing subtitle idx for %s: %s' % (extra, traceback.format_exc()))
+
+        return detected_languages
+
     def determineMovie(self, group):
         imdb_id = None
 
@@ -433,7 +472,9 @@ class Scanner(Plugin):
             for identifier in group['identifiers']:
 
                 if len(identifier) > 2:
-                    movie = fireEvent('movie.search', q = '%(name)s %(year)s' % self.getReleaseNameYear(identifier), merge = True, limit = 1)
+                    try: filename = list(group['files'].get('movie'))[0]
+                    except: filename = None
+                    movie = fireEvent('movie.search', q = '%(name)s %(year)s' % self.getReleaseNameYear(identifier, file_name = filename), merge = True, limit = 1)
 
                     if len(movie) > 0:
                         imdb_id = movie[0]['imdb']
@@ -651,7 +692,18 @@ class Scanner(Plugin):
 
         return ''
 
-    def getReleaseNameYear(self, release_name):
+    def getReleaseNameYear(self, release_name, file_name = None):
+
+        # Use guessit first
+        if file_name:
+            guess = guess_movie_info(file_name)
+            if guess.get('title') and guess.get('year'):
+                return {
+                    'name': guess.get('title'),
+                    'year': guess.get('year'),
+                }
+
+        # Backup to simple
         cleaned = ' '.join(re.split('\W+', simplifyString(release_name)))
         cleaned = re.sub(self.clean, ' ', cleaned)
         year = self.findYear(cleaned)

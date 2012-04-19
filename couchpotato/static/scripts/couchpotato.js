@@ -70,13 +70,13 @@ var CouchPotato = new Class({
 		[new Element('a.orange', {
 			'text': 'Restart',
 			'events': {
-				'click': self.restart.bind(self)
+				'click': self.restartQA.bind(self)
 			}
 		}),
 		new Element('a.red', {
 			'text': 'Shutdown',
 			'events': {
-				'click': self.shutdown.bind(self)
+				'click': self.shutdownQA.bind(self)
 			}
 		}),
 		new Element('a', {
@@ -161,12 +161,48 @@ var CouchPotato = new Class({
 		self.checkAvailable(1000);
 	},
 
+	shutdownQA: function(){
+		var self = this;
+
+		new Question('Are you sure you want to shutdown CouchPotato?', '', [{
+			'text': 'Shutdown',
+			'class': 'shutdown red',
+			'events': {
+				'click': function(e){
+					(e).preventDefault();
+					self.shutdown();
+				}
+			}
+		}, {
+			'text': 'No, nevah!',
+			'cancel': true
+		}]);
+	},
+
 	restart: function(message, title){
 		var self = this;
 
 		self.blockPage(message || 'Restarting... please wait. If this takes to long, something must have gone wrong.', title);
 		Api.request('app.restart');
 		self.checkAvailable(1000);
+	},
+
+	restartQA: function(message, title){
+		var self = this;
+
+		new Question('Are you sure you want to restart CouchPotato?', '', [{
+			'text': 'Restart',
+			'class': 'restart orange',
+			'events': {
+				'click': function(e){
+					(e).preventDefault();
+					self.restart(message, title);
+				}
+			}
+		}, {
+			'text': 'No, nevah!',
+			'cancel': true
+		}]);
 	},
 
 	checkForUpdate: function(func){
@@ -190,7 +226,6 @@ var CouchPotato = new Class({
 				},
 				'onSuccess': function(){
 					self.unBlockPage();
-					self.fireEvent('load');
 				}
 			});
 
