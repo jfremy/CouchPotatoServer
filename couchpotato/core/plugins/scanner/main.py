@@ -129,7 +129,8 @@ class Scanner(Plugin):
                 # Add release
                 fireEvent('release.add', group = group)
                 library_item = fireEvent('library.update', identifier = group['library'].get('identifier'), single = True)
-                added_identifier.append(library_item['identifier'])
+                if library_item:
+                    added_identifier.append(library_item['identifier'])
 
         return added_identifier
 
@@ -474,12 +475,15 @@ class Scanner(Plugin):
                 if len(identifier) > 2:
                     try: filename = list(group['files'].get('movie'))[0]
                     except: filename = None
-                    movie = fireEvent('movie.search', q = '%(name)s %(year)s' % self.getReleaseNameYear(identifier, file_name = filename), merge = True, limit = 1)
 
-                    if len(movie) > 0:
-                        imdb_id = movie[0]['imdb']
-                        log.debug('Found movie via search: %s' % cur_file)
-                        if imdb_id: break
+                    name_year = self.getReleaseNameYear(identifier, file_name = filename)
+                    if name_year.get('name') and name_year.get('year'):
+                        movie = fireEvent('movie.search', q = '%(name)s %(year)s' % name_year, merge = True, limit = 1)
+
+                        if len(movie) > 0:
+                            imdb_id = movie[0]['imdb']
+                            log.debug('Found movie via search: %s' % cur_file)
+                            if imdb_id: break
                 else:
                     log.debug('Identifier to short to use for search: %s' % identifier)
 
@@ -686,7 +690,7 @@ class Scanner(Plugin):
         return None
 
     def findYear(self, text):
-        matches = re.search('(?P<year>[0-9]{4})', text)
+        matches = re.search('(?P<year>[12]{1}[0-9]{3})', text)
         if matches:
             return matches.group('year')
 
@@ -696,12 +700,15 @@ class Scanner(Plugin):
 
         # Use guessit first
         if file_name:
-            guess = guess_movie_info(file_name)
-            if guess.get('title') and guess.get('year'):
-                return {
-                    'name': guess.get('title'),
-                    'year': guess.get('year'),
-                }
+            try:
+                guess = guess_movie_info(file_name)
+                if guess.get('title') and guess.get('year'):
+                    return {
+                        'name': guess.get('title'),
+                        'year': guess.get('year'),
+                    }
+            except:
+                log.debug('Could not detect via guessit "%s": %s' % (file_name, traceback.format_exc()))
 
         # Backup to simple
         cleaned = ' '.join(re.split('\W+', simplifyString(release_name)))
@@ -713,7 +720,7 @@ class Scanner(Plugin):
                 movie_name = cleaned.split(year).pop(0).strip()
                 return {
                     'name': movie_name,
-                    'year': year,
+                    'year': int(year),
                 }
             except:
                 pass
@@ -722,7 +729,7 @@ class Scanner(Plugin):
                 movie_name = cleaned.split('  ').pop(0).strip()
                 return {
                     'name': movie_name,
-                    'year': year,
+                    'year': int(year),
                 }
             except:
                 pass
