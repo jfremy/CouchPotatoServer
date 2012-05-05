@@ -1,7 +1,7 @@
 from couchpotato import get_session
 from couchpotato.api import addApiView
 from couchpotato.core.event import addEvent
-from couchpotato.core.helpers.encoding import toUnicode, toSafeString
+from couchpotato.core.helpers.encoding import toUnicode
 from couchpotato.core.helpers.request import jsonified, getParams
 from couchpotato.core.helpers.variable import mergeDicts, md5, getExt
 from couchpotato.core.logger import CPLog
@@ -18,7 +18,7 @@ class QualityPlugin(Plugin):
     qualities = [
         {'identifier': 'bd50', 'hd': True, 'size': (15000, 60000), 'label': 'BR-Disk', 'alternative': ['bd25'], 'allow': ['1080p'], 'ext':[], 'tags': ['bdmv', 'certificate', ('complete', 'bluray')]},
         {'identifier': '1080p', 'hd': True, 'size': (5000, 20000), 'label': '1080P', 'width': 1920, 'alternative': [], 'allow': [], 'ext':['mkv', 'm2ts']},
-        {'identifier': '720p', 'hd': True, 'size': (3500, 10000), 'label': '720P', 'width': 1280, 'alternative': [], 'allow': [], 'ext':['mkv', 'm2ts']},
+        {'identifier': '720p', 'hd': True, 'size': (3500, 10000), 'label': '720P', 'width': 1280, 'alternative': [], 'allow': [], 'ext':['mkv', 'm2ts', 'ts']},
         {'identifier': 'brrip', 'hd': True, 'size': (700, 7000), 'label': 'BR-Rip', 'alternative': ['bdrip'], 'allow': ['720p'], 'ext':['avi']},
         {'identifier': 'dvdr', 'size': (3000, 10000), 'label': 'DVD-R', 'alternative': [], 'allow': [], 'ext':['iso', 'img'], 'tags': ['pal', 'ntsc', 'video_ts', 'audio_ts']},
         {'identifier': 'dvdrip', 'size': (600, 2400), 'label': 'DVD-Rip', 'alternative': ['dvdrip'], 'allow': [], 'ext':['avi', 'mpg', 'mpeg']},
@@ -161,38 +161,38 @@ class QualityPlugin(Plugin):
         for cur_file in files:
             size = (os.path.getsize(cur_file) / 1024 / 1024) if os.path.isfile(cur_file) else 0
             words = re.split('\W+', cur_file.lower())
-            safe_cur_file = toSafeString(cur_file)
 
             for quality in self.all():
 
                 # Check tags
                 if quality['identifier'] in words:
-                    log.debug('Found via identifier "%s" in %s' % (quality['identifier'], safe_cur_file))
+                    log.debug('Found via identifier "%s" in %s' % (quality['identifier'], cur_file))
                     return self.setCache(hash, quality)
 
                 if list(set(quality.get('alternative', [])) & set(words)):
-                    log.debug('Found %s via alt %s in %s' % (quality['identifier'], quality.get('alternative'), safe_cur_file))
+                    log.debug('Found %s via alt %s in %s' % (quality['identifier'], quality.get('alternative'), cur_file))
                     return self.setCache(hash, quality)
 
                 for tag in quality.get('tags', []):
                     if isinstance(tag, tuple) and '.'.join(tag) in '.'.join(words):
-                        log.debug('Found %s via tag %s in %s' % (quality['identifier'], quality.get('tags'), safe_cur_file))
+                        log.debug('Found %s via tag %s in %s' % (quality['identifier'], quality.get('tags'), cur_file))
                         return self.setCache(hash, quality)
 
                 if list(set(quality.get('tags', [])) & set(words)):
-                    log.debug('Found %s via tag %s in %s' % (quality['identifier'], quality.get('tags'), safe_cur_file))
+                    log.debug('Found %s via tag %s in %s' % (quality['identifier'], quality.get('tags'), cur_file))
                     return self.setCache(hash, quality)
 
                 # Check on unreliable stuff
                 if loose:
-                    # Check extension + filesize
-                    if list(set(quality.get('ext', [])) & set(words)) and size >= quality['size_min'] and size <= quality['size_max']:
-                        log.debug('Found %s via ext %s in %s' % (quality['identifier'], quality.get('ext'), words))
-                        return self.setCache(hash, quality)
 
                     # Last check on resolution only
                     if quality.get('width', 480) == extra.get('resolution_width', 0):
                         log.debug('Found %s via resolution_width: %s == %s' % (quality['identifier'], quality.get('width', 480), extra.get('resolution_width', 0)))
+                        return self.setCache(hash, quality)
+
+                    # Check extension + filesize
+                    if list(set(quality.get('ext', [])) & set(words)) and size >= quality['size_min'] and size <= quality['size_max']:
+                        log.debug('Found %s via ext and filesize %s in %s' % (quality['identifier'], quality.get('ext'), words))
                         return self.setCache(hash, quality)
 
 
@@ -203,4 +203,4 @@ class QualityPlugin(Plugin):
                 return self.setCache(hash, quality)
 
         log.debug('Could not identify quality for: %s' % files)
-        return self.setCache(hash, self.single('dvdrip'))
+        return None

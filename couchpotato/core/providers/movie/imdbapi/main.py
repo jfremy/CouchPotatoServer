@@ -27,11 +27,11 @@ class IMDBAPI(MovieProvider):
 
         name_year = fireEvent('scanner.name_year', q, single = True)
 
-        if not name_year.get('name'):
+        if not q or not name_year.get('name'):
             return []
 
         cache_key = 'imdbapi.cache.%s' % q
-        cached = self.getCache(cache_key, self.urls['search'] % tryUrlencode({'t': name_year.get('name'), 'y': name_year.get('year', '')}))
+        cached = self.getCache(cache_key, self.urls['search'] % tryUrlencode({'t': name_year.get('name'), 'y': name_year.get('year', '')}), timeout = 3)
 
         if cached:
             result = self.parseMovie(cached)
@@ -45,8 +45,11 @@ class IMDBAPI(MovieProvider):
 
     def getInfo(self, identifier = None):
 
+        if not identifier:
+            return {}
+
         cache_key = 'imdbapi.cache.%s' % identifier
-        cached = self.getCache(cache_key, self.urls['info'] % identifier)
+        cached = self.getCache(cache_key, self.urls['info'] % identifier, timeout = 3)
 
         if cached:
             result = self.parseMovie(cached)

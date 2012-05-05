@@ -56,7 +56,7 @@ class Updater(Plugin):
                     fireEventAsync('app.crappy_restart')
             else:
                 if self.conf('notification'):
-                    fireEvent('updater.available', message = 'A new update is available', data = self.updater.getVersion())
+                    fireEvent('updater.available', message = 'A new update is available', data = self.updater.info())
 
     def info(self):
         return self.updater.info()
@@ -96,7 +96,8 @@ class BaseUpdater(Plugin):
             'last_check': self.last_check,
             'update_version': self.update_version,
             'version': self.getVersion(),
-            'repo_name': '%s/%s' % (self.repo_user, self.repo_name)
+            'repo_name': '%s/%s' % (self.repo_user, self.repo_name),
+            'branch': self.branch,
         }
 
     def check(self):

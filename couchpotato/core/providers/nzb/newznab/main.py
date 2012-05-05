@@ -133,7 +133,7 @@ class Newznab(NZBProvider, RSS):
                         'size': int(size) / 1024 / 1024,
                         'url': (self.getUrl(host['host'], self.urls['download']) % id) + self.getApiExt(host),
                         'download': self.download,
-                        'detail_url': (self.getUrl(host['host'], self.urls['detail']) % id) + self.getApiExt(host),
+                        'detail_url': '%sdetails/%s' % (cleanHost(host['host']), id),
                         'content': self.getTextElement(nzb, "description"),
                     }
 
@@ -157,9 +157,9 @@ class Newznab(NZBProvider, RSS):
 
     def getHosts(self):
 
-        uses = str(self.conf('use')).split(',')
-        hosts = self.conf('host').split(',')
-        api_keys = self.conf('api_key').split(',')
+        uses = [x.strip() for x in str(self.conf('use')).split(',')]
+        hosts = [x.strip() for x in self.conf('host').split(',')]
+        api_keys = [x.strip() for x in self.conf('api_key').split(',')]
 
         list = []
         for nr in range(len(hosts)):

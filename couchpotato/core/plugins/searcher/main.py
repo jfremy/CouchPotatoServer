@@ -65,6 +65,8 @@ class Searcher(Plugin):
 
     def single(self, movie):
 
+        db = get_session()
+
         pre_releases = fireEvent('quality.pre_releases', single = True)
         release_dates = fireEvent('library.update_release_date', identifier = movie['library']['identifier'], merge = True)
         available_status = fireEvent('status.get', 'available', single = True)
@@ -94,7 +96,6 @@ class Searcher(Plugin):
 
                 # Add them to this movie releases list
                 for nzb in sorted_results:
-                    db = get_session()
 
                     rls = db.query(Release).filter_by(identifier = md5(nzb['url'])).first()
                     if not rls:
@@ -106,24 +107,31 @@ class Searcher(Plugin):
                         )
                         db.add(rls)
                         db.commit()
+                    else:
+                        [db.delete(info) for info in rls.info]
+                        db.commit()
 
-                        for info in nzb:
-                            try:
-                                if not isinstance(nzb[info], (str, unicode, int, long)):
-                                    continue
+                    for info in nzb:
+                        try:
+                            if not isinstance(nzb[info], (str, unicode, int, long)):
+                                continue
 
-                                rls_info = ReleaseInfo(
-                                    identifier = info,
-                                    value = toUnicode(nzb[info])
-                                )
-                                rls.info.append(rls_info)
-                                db.commit()
-                            except InterfaceError:
-                                log.debug('Couldn\'t add %s to ReleaseInfo: %s' % (info, traceback.format_exc()))
+                            rls_info = ReleaseInfo(
+                                identifier = info,
+                                value = toUnicode(nzb[info])
+                            )
+                            rls.info.append(rls_info)
+                            db.commit()
+                        except InterfaceError:
+                            log.debug('Couldn\'t add %s to ReleaseInfo: %s' % (info, traceback.format_exc()))
 
 
                 for nzb in sorted_results:
-                    return self.download(data = nzb, movie = movie)
+                    downloaded = self.download(data = nzb, movie = movie)
+                    if downloaded:
+                        return True
+                    else:
+                        break
             else:
                 log.info('Better quality (%s) already available or snatched for %s' % (quality_type['quality']['label'], default_title))
                 fireEvent('movie.restatus', movie['id'])
@@ -133,6 +141,7 @@ class Searcher(Plugin):
             if self.shuttingDown():
                 break
 
+        db.remove()
         return False
 
     def download(self, data, movie, manual = False):
@@ -177,7 +186,7 @@ class Searcher(Plugin):
 
             return True
 
-        log.error('Tried to download, but none of the downloaders are enabled')
+        log.info('Tried to download, but none of the downloaders are enabled')
         return False
 
     def correctMovie(self, nzb = {}, movie = {}, quality = {}, **kwargs):
@@ -190,18 +199,25 @@ class Searcher(Plugin):
             log.info('Wrong: Outside retention, age is %s, needs %s or lower: %s' % (nzb['age'], retention, nzb['name']))
             return False
 
-        nzb_words = re.split('\W+', simplifyString(nzb['name']))
-        required_words = self.conf('required_words').split(',')
+        movie_name = simplifyString(nzb['name'])
+        nzb_words = re.split('\W+', movie_name)
+        required_words = [x.strip() for x in self.conf('required_words').split(',')]
 
         if self.conf('required_words') and not list(set(nzb_words) & set(required_words)):
             log.info("NZB doesn't contain any of the required words.")
             return False
 
-        ignored_words = self.conf('ignored_words').split(',')
+        ignored_words = [x.strip() for x in self.conf('ignored_words').split(',')]
         blacklisted = list(set(nzb_words) & set(ignored_words))
         if self.conf('ignored_words') and blacklisted:
             log.info("Wrong: '%s' blacklisted words: %s" % (nzb['name'], ", ".join(blacklisted)))
             return False
+
+        pron_tags = ['xxx', 'sex', 'anal', 'tits', 'fuck', 'porn', 'orgy', 'milf', 'boobs']
+        for p_tag in pron_tags:
+            if p_tag in movie_name:
+                log.info('Wrong: %s, probably pr0n' % (nzb['name']))
+                return False
 
         #qualities = fireEvent('quality.all', single = True)
         preferred_quality = fireEvent('quality.single', identifier = quality['identifier'], single = True)
@@ -313,10 +329,10 @@ class Searcher(Plugin):
             check_movie = fireEvent('scanner.name_year', check_name, single = True)
 
             try:
-                check_words = re.split('\W+', check_movie.get('name', ''))
-                movie_words = re.split('\W+', simplifyString(movie_name))
+                check_words = filter(None, re.split('\W+', check_movie.get('name', '')))
+                movie_words = filter(None, re.split('\W+', simplifyString(movie_name)))
 
-                if len(list(set(check_words) - set(movie_words))) == 0:
+                if len(check_words) > 0 and len(movie_words) > 0 and len(list(set(check_words) - set(movie_words))) == 0:
                     return True
             except:
                 pass
@@ -345,15 +361,15 @@ class Searcher(Plugin):
         else:
             if wanted_quality in pre_releases:
                 # Prerelease 1 week before theaters
-                if dates.get('theater') >= now - 604800 and wanted_quality in pre_releases:
+                if dates.get('theater') - 604800 < now:
                     return True
             else:
                 # 6 weeks after theater release
-                if dates.get('theater') < now - 3628800:
+                if dates.get('theater') + 3628800 < now:
                     return True
 
                 # 6 weeks before dvd release
-                if dates.get('dvd') > now - 3628800:
+                if dates.get('dvd') - 3628800 < now:
                     return True
 
                 # Dvd should be released

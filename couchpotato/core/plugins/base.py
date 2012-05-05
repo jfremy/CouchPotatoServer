@@ -55,7 +55,7 @@ class Plugin(object):
         s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', self.__class__.__name__)
         class_name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
-        path = '%s/static/%s/' % (Env.setting('api_key'), class_name)
+        path = 'api/%s/static/%s/' % (Env.setting('api_key'), class_name)
         addView(path + '<path:filename>', self.showStatic, static = True)
 
         if add_to_head:
@@ -198,7 +198,7 @@ class Plugin(object):
                 log.error("Something went wrong when finishing the plugin function. Could not find the 'is_running' key")
 
 
-    def getCache(self, cache_key, url = None, timeout = 300):
+    def getCache(self, cache_key, url = None, **kwargs):
         cache = Env.get('cache').get(cache_key)
         if cache:
             if not Env.get('dev'): log.debug('Getting cache %s' % cache_key)
@@ -206,8 +206,14 @@ class Plugin(object):
 
         if url:
             try:
-                data = self.urlopen(url)
-                self.setCache(cache_key, data, timeout = timeout)
+
+                cache_timeout = 300
+                if kwargs.get('cache_timeout'):
+                    cache_timeout = kwargs.get('cache_timeout')
+                    del kwargs['cache_timeout']
+
+                data = self.urlopen(url, **kwargs)
+                self.setCache(cache_key, data, timeout = cache_timeout)
                 return data
             except:
                 pass

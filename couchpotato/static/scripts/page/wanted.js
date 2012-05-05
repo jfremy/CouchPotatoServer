@@ -206,7 +206,8 @@ window.addEvent('domready', function(){
 					function(){
 						Api.request('movie.delete', {
 							'data': {
-								'id': self.movie.get('id')
+								'id': self.movie.get('id'),
+								'delete_from': self.movie.list.options.identifier
 							},
 							'onComplete': function(){
 								movie.set('tween', {
@@ -242,7 +243,7 @@ window.addEvent('domready', function(){
 			create: function(){
 				var self = this;
 
-				self.el = new Element('a.files', {
+				self.el = new Element('a.directory', {
 					'title': 'Available files',
 					'events': {
 						'click': self.showFiles.bind(self)

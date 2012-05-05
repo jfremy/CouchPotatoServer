@@ -31,7 +31,7 @@ class Scanner(Plugin):
     ignored_in_path = ['_unpack', '_failed_', '_unknown_', '_exists_', '.appledouble', '.appledb', '.appledesktop', os.path.sep + '._', '.ds_store', 'cp.cpnfo'] #unpacking, smb-crap, hidden files
     ignore_names = ['extract', 'extracting', 'extracted', 'movie', 'movies', 'film', 'films', 'download', 'downloads', 'video_ts', 'audio_ts', 'bdmv', 'certificate']
     extensions = {
-        'movie': ['mkv', 'wmv', 'avi', 'mpg', 'mpeg', 'mp4', 'm2ts', 'iso', 'img', 'mdf'],
+        'movie': ['mkv', 'wmv', 'avi', 'mpg', 'mpeg', 'mp4', 'm2ts', 'iso', 'img', 'mdf', 'ts'],
         'movie_extra': ['mds'],
         'dvd': ['vts_*', 'vob'],
         'nfo': ['nfo', 'txt', 'tag'],
@@ -165,6 +165,9 @@ class Scanner(Plugin):
 
         for file_path in files:
 
+            if not os.path.exists(file_path):
+                continue
+
             # Remove ignored files
             if self.isSampleFile(file_path):
                 leftovers.append(file_path)
@@ -177,15 +180,18 @@ class Scanner(Plugin):
 
                 # Normal identifier
                 identifier = self.createStringIdentifier(file_path, folder, exclude_filename = is_dvd_file)
+                identifiers = [identifier]
 
                 # Identifier with quality
                 quality = fireEvent('quality.guess', [file_path], single = True) if not is_dvd_file else {'identifier':'dvdr'}
-                identifier_with_quality = '%s %s' % (identifier, quality.get('identifier', ''))
+                if quality:
+                    identifier_with_quality = '%s %s' % (identifier, quality.get('identifier', ''))
+                    identifiers = [identifier_with_quality, identifier]
 
                 if not movie_files.get(identifier):
                     movie_files[identifier] = {
                         'unsorted_files': [],
-                        'identifiers': [identifier_with_quality, identifier],
+                        'identifiers': identifiers,
                         'is_dvd': is_dvd_file,
                     }
 
@@ -263,7 +269,7 @@ class Scanner(Plugin):
                     file_too_new = tryInt(time.time() - file_time)
                     break
 
-            if file_too_new and not Env.get('dev'):
+            if file_too_new:
                 log.info('Files seem to be still unpacking or just unpacked (created on %s), ignoring for now: %s' % (time.ctime(file_time), identifier))
                 continue
 
@@ -492,7 +498,7 @@ class Scanner(Plugin):
                 'identifier': imdb_id
             }, update_after = False, single = True)
 
-        log.error('No imdb_id found for %s.' % group['identifiers'])
+        log.error('No imdb_id found for %s. Add a NFO file with IMDB id or add the year to the filename.' % group['identifiers'])
         return {}
 
     def getCPImdb(self, string):
