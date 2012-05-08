@@ -31,17 +31,29 @@ class Twitter(Notification):
         addApiView('notify.%s.auth_url' % self.getName().lower(), self.getAuthorizationUrl)
         addApiView('notify.%s.credentials' % self.getName().lower(), self.getCredentials)
 
-    def notify(self, message = '', data = {}):
+    def notify(self, message = '', data = {}, listener = None):
         if self.isDisabled(): return
 
         api = Api(self.consumer_key, self.consumer_secret, self.conf('access_token_key'), self.conf('access_token_secret'))
 
+        direct_message = self.conf('direct_message')
+        direct_message_users = self.conf('screen_name')
+        
         mention = self.conf('mention')
         if mention:
-            message = '%s @%s' % (message, mention.lstrip('@'))
+            if direct_message:
+                direct_message_users = '%s %s' % (direct_message_users, mention)
+                direct_message_users = direct_message_users.replace('@',' ')
+                direct_message_users = direct_message_users.replace(',',' ')
+            else:
+                message = '%s @%s' % (message, mention.lstrip('@'))
 
         try:
-            api.PostUpdate('[%s] %s' % (self.default_title, message))
+            if direct_message:
+                for user in direct_message_users.split():
+                    api.PostDirectMessage(user, '[%s] %s' % (self.default_title, message))
+            else:
+                api.PostUpdate('[%s] %s' % (self.default_title, message))
         except Exception, e:
             log.error('Error sending tweet: %s' % e)
             return False
