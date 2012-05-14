@@ -64,8 +64,12 @@ class IMDBAPI(MovieProvider):
         movie_data = {}
         try:
 
-            if isinstance(movie, (str, unicode)):
-                movie = json.loads(movie)
+            try:
+                if isinstance(movie, (str, unicode)):
+                    movie = json.loads(movie)
+            except ValueError:
+                log.info('No proper json to decode')
+                return movie_data
 
             if movie.get('Response') == 'Parse Error':
                 return movie_data
@@ -84,10 +88,10 @@ class IMDBAPI(MovieProvider):
                     'poster': [movie.get('Poster', '')] if movie.get('Poster') and len(movie.get('Poster', '')) > 4 else [],
                 },
                 'rating': {
-                    'imdb': (tryFloat(movie.get('Rating', 0)), tryInt(movie.get('Votes', ''))),
-                    'rotten': (tryFloat(movie.get('tomatoRating', 0)), tryInt(movie.get('tomatoReviews', 0))),
+                    'imdb': (tryFloat(movie.get('imdbRating', 0)), tryInt(movie.get('imdbVotes', ''))),
+                    #'rotten': (tryFloat(movie.get('tomatoRating', 0)), tryInt(movie.get('tomatoReviews', 0))),
                 },
-                'imdb': str(movie.get('ID', '')),
+                'imdb': str(movie.get('imdbID', '')),
                 'runtime': self.runtimeToMinutes(movie.get('Runtime', '')),
                 'released': movie.get('Released', ''),
                 'year': year if isinstance(year, (int)) else None,
